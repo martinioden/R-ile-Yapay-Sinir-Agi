@@ -1,0 +1,109 @@
+#Bu örnek, Boston, MA, ABD banliyölerinde bir dizi medyan özellik değerlerini içeren MASS paketindeki Boston verilerini kullanılarak yapılmıştır.
+#Sinir ağımız için gerekli kütüphane paketlerini indirip, yüklemelerini yapalım. Daha fazla bilgi için R terminalinden help(Boston) yazarak veri işlevlerine bakınız.
+
+
+# Kullanılan Kütüphaneler ( Pokemonlar )
+install.packages(c("MASS","neuralnet","nnet","NeuralNetTools","boot","caret","corrplot","DataExplorer"))
+library(MASS)
+library(neuralnet)
+library(nnet)
+library(NeuralNetTools)
+library(boot)
+library(caret)
+library(corrplot)
+library(DataExplorer)
+
+
+#Kütüphanelerimizi indirip, yüklediysek Boston verimizi yükleyelim ve R-studio üstünde tanıtalım.
+Boston
+veri <- Boston
+introduce(veri)
+
+
+#Veri setinde gerektiği durumda veri setinin sınıfını değiştirmek istenildiğinde ya da sınıfını görmek istenildiğinde plot_str() fonksiyonu ile tüm parametrelerin kategorileri görülebilir.
+plot_str(veri)
+
+
+#Bu görseli istemiyorsanız eğer str() fonksiyonu ile de parametrelerin kategorilerini görebilirsiniz.
+str(veri)
+
+#Görüldüğü gibi veri seti 506 gözlem ve 14 parametreden oluşmaktadır ve 12 tanesi numerik, 2 tanesi ise integer haldedir.
+
+
+
+#Eksik Veri Konrolü
+eksik_veri <- apply(veri, 2,function(x) sum(is.na(x)))
+eksik_veri
+
+#Eksik gözlemlere bakıldığında eksik veri görülmemiştir. Bu işlemi yaparken apply fonksinoyu kullanılmıştır.
+
+#Eğer görsel bir tablo içerisinde eksik verileri görmek istersek.
+plot_missing(veri)
+
+
+#Korelasyon İnceleme
+#Verimiz üzerinde korelasyonlar incelenmek istenildiğinde corrplot kütüphanesindeki corrplot fonksiyonu ile korelasyonlar görselleştirilmiştir.
+corrplot(cor(veri))
+
+
+
+#Veri setinde ölçümler farklı olduğu için bu değerlerin aynı baremde birleşebilmesi için veri setinin normalize edilmesi gerekmektedir.
+#Bunun için “scale” formulü kullanılır.
+#Bu normalizasyon işlemini yaparken veri setinde her bir parametrenin maksimum ve minimum değerleri üzerine hesaplanarak gerçekleştirilmiştir.
+#“Scale” fonksiyonu veri setinin karakterini bozmadan ortalaması sıfır, standart sapmasını bir üzerine merkezileştirerek veri setini günceller.
+maxValue <- apply(veri, 2, max)
+minValue <- apply(veri, 2, min)
+
+veri <- as.data.frame(scale(veri, center = minValue, scale = maxValue - minValue))
+
+
+#Rasgele örneklem seçerken “sample” fonksiyonu kullanılır.
+#Eksik gözlem bulunmadığı için ve yanlı bir seçim olmaması için rasgele örneklem seçilmiştir.
+#Belli bir sayı değil de belli bir oran üzerine bölmek isteseydik eğer şu kodu kullanmamız gerekirdi, “sample(1:nrow(data),round(0.80*nrow(data)))” böyle rasgele olarak % 80 veri seti seçilmiş olurdu.
+orneklem <- sample(1:nrow(veri), 400)
+egitim_verisi <- veri[orneklem, ]
+test_verisi <- veri[-orneklem, ]
+
+#Seçilen test ve eğitim veri setlerinin uzunluk ve derinliğine bakaldığında toplam 14 parametre görülmektedir.
+#Bunlardan medv parametresi bağımlı değişkenimizken diğerleri bağımsız değişkenlerdir.
+dim(test_verisi)
+dim(egitim_verisi)
+
+
+#Amacımız medv bağımlı değişkeni tahmin etmektir. Bunun için ihtiyacımız olan formul ise: “medv ~ crim + zn + indus + chas + nox + rm + age + dis + rad + tax + ptratio + black + lstat” olacaktır.
+#Bu fonksiyon ile parametreler arasına otomatik olarak “+” eklenerek modele eklenecektir.
+parametre_birlestirme <- function(resp, dt) {
+  nms <- names(dt)
+  fmla <- as.formula(paste(resp, "~", paste(nms[!nms %in% resp], collapse = " + ")))
+  fmla
+}
+
+duzeltilmis_veri <- parametre_birlestirme("medv", Boston)
+
+
+#Tek gizli katmanlı modelimiz.
+tk_ysa_model <- neuralnet(duzeltilmis_veri
+                          , data= egitim_verisi
+                          , hidden=8
+                          , linear.output=TRUE)
+
+#Sinir ağımızı görselleştirelim.
+plot(tk_ysa_model)
+
+
+#Sinir ağı nesnesi için bir sinirsel yorumlama diyagramını oluşturalım.
+plotnet(tk_ysa_model)
+
+
+#Tek gizli katmanlı modelimiz için üretilen hata değeri;
+pr.nn <- compute(tk_ysa_model,test_verisi[,1:13])
+pr.nn <- pr.nn$net.result*(max(veri$medv)-min(veri$medv))+min(veri$medv)
+test.cv.r <- (test_verisi$medv)*(max(veri$medv)-min(veri$medv))+min(veri$medv)
+MSE <- sum((test.cv.r - pr.nn)^2)/nrow(test_verisi)
+
+#Hata değeri
+print(MSE)
+
+
+
+
